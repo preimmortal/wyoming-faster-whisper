@@ -23,7 +23,6 @@ async def main() -> None:
     parser.add_argument(
         "--model",
         required=True,
-        choices=list(v.value for v in FasterWhisperModel),
         help="Name of faster-whisper model to use",
     )
     parser.add_argument("--uri", required=True, help="unix:// or tcp://")
