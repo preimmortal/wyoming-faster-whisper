@@ -9,7 +9,7 @@ from urllib.request import urlopen
 
 from .file_hash import get_file_hash
 
-URL_FORMAT = "https://github.com/rhasspy/models/releases/download/v1.0/asr_faster-whisper-{model}.tar.gz"
+URL_FORMAT = "https://github.com/preimmortal/wyoming-faster-whisper/releases/download/v1.0.0-models/{model}.tar.gz"
 
 _LOGGER = logging.getLogger(__name__)
 
