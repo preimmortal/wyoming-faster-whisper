@@ -26,6 +26,12 @@ class FasterWhisperModel(str, Enum):
     MEDIUM = "medium"
     MEDIUM_INT8 = "medium-int8"
 
+    # Personal Models
+    SMALL_EN_INT8 = "small-en-int8"
+    SYSTRAN_TINY_EN = "systran-tiny-en"
+    SYSTRAN_BASE_EN = "systran-base-en"
+    SYSTRAN_SMALL_EN = "systran-small-en"
+
 
 EXPECTED_HASHES = {
     FasterWhisperModel.TINY: {
@@ -86,7 +92,7 @@ def download_model(model: FasterWhisperModel, dest_dir: Union[str, Path]) -> Pat
 
     dest_dir.mkdir(parents=True, exist_ok=True)
 
-    model_url = URL_FORMAT.format(model=model)
+    model_url = URL_FORMAT.format(model=model.value)
     with urlopen(model_url) as response:
         with tarfile.open(mode="r|*", fileobj=response) as tar_gz:
             tar_gz.extractall(dest_dir)
