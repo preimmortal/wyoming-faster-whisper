@@ -2,16 +2,14 @@
 import argparse
 import asyncio
 import logging
+import re
 from functools import partial
-from pathlib import Path
-from typing import Optional
 
+import faster_whisper
 from wyoming.info import AsrModel, AsrProgram, Attribution, Info
 from wyoming.server import AsyncServer
 
-from .const import WHISPER_LANGUAGES
-from .download import FasterWhisperModel, download_model, find_model
-from .faster_whisper import WhisperModel
+from . import __version__
 from .handler import FasterWhisperEventHandler
 
 _LOGGER = logging.getLogger(__name__)
@@ -23,7 +21,6 @@ async def main() -> None:
     parser.add_argument(
         "--model",
         required=True,
-        choices=list(v.value for v in FasterWhisperModel),
         help="Name of faster-whisper model to use",
     )
     parser.add_argument("--uri", required=True, help="unix:// or tcp://")
@@ -56,27 +53,39 @@ async def main() -> None:
         type=int,
         default=5,
     )
+    parser.add_argument(
+        "--initial-prompt",
+        help="Optional text to provide as a prompt for the first window",
+    )
+    #
     parser.add_argument("--debug", action="store_true", help="Log DEBUG messages")
+    parser.add_argument(
+        "--log-format", default=logging.BASIC_FORMAT, help="Format for log messages"
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=__version__,
+        help="Print version and exit",
+    )
     args = parser.parse_args()
 
     if not args.download_dir:
         # Download to first data dir by default
         args.download_dir = args.data_dir[0]
 
-    logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO)
+    logging.basicConfig(
+        level=logging.DEBUG if args.debug else logging.INFO, format=args.log_format
+    )
     _LOGGER.debug(args)
 
-    # Look for model
-    model = FasterWhisperModel(args.model)
-    model_dir: Optional[Path] = None
-    for data_dir in args.data_dir:
-        model_dir = find_model(model, data_dir)
-        if model_dir is not None:
-            break
-
-    if model_dir is None:
-        _LOGGER.info("Downloading %s to %s", model, args.download_dir)
-        model_dir = download_model(model, args.download_dir)
+    model_name = args.model
+    match = re.match(r"^(tiny|base|small|medium)[.-]int8$", args.model)
+    if match:
+        # Original models re-uploaded to huggingface
+        model_size = match.group(1)
+        model_name = f"{model_size}-int8"
+        args.model = f"rhasspy/faster-whisper-{model_name}"
 
     if args.language == "auto":
         # Whisper does not understand "auto"
@@ -92,26 +101,29 @@ async def main() -> None:
                     url="https://github.com/guillaumekln/faster-whisper/",
                 ),
                 installed=True,
+                version=__version__,
                 models=[
                     AsrModel(
-                        name=model.value,
-                        description=model.value,
+                        name=model_name,
+                        description=model_name,
                         attribution=Attribution(
-                            name="rhasspy",
-                            url="https://github.com/rhasspy/models/",
+                            name="Systran",
+                            url="https://huggingface.co/Systran",
                         ),
                         installed=True,
-                        languages=WHISPER_LANGUAGES,
+                        languages=faster_whisper.tokenizer._LANGUAGE_CODES,  # pylint: disable=protected-access
+                        version=faster_whisper.__version__,
                     )
                 ],
             )
         ],
     )
 
-    # Load converted faster-whisper model
-    _LOGGER.debug("Loading %s", model_dir)
-    whisper_model = WhisperModel(
-        str(model_dir),
+    # Load model
+    _LOGGER.debug("Loading %s", args.model)
+    whisper_model = faster_whisper.WhisperModel(
+        args.model,
+        download_root=args.download_dir,
         device=args.device,
         compute_type=args.compute_type,
     )
@@ -126,14 +138,20 @@ async def main() -> None:
             args,
             whisper_model,
             model_lock,
+            initial_prompt=args.initial_prompt,
         )
     )
 
 
 # -----------------------------------------------------------------------------
 
+
+def run() -> None:
+    asyncio.run(main())
+
+
 if __name__ == "__main__":
     try:
-        asyncio.run(main())
+        run()
     except KeyboardInterrupt:
         pass
